@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f8ff;
+  --foreground: #14213d;
+  --card: #ffffff;
+  --border: #dbe5f5;
+  --muted: #56708f;
+  --accent: #175fe9;
+  --accent-soft: #e9f1ff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), "Microsoft YaHei", sans-serif;
+  min-height: 100vh;
+  background-image:
+    radial-gradient(circle at 15% -10%, rgba(23, 95, 233, 0.2), transparent 38%),
+    radial-gradient(circle at 85% 0%, rgba(0, 186, 136, 0.15), transparent 42%);
+}
+
+textarea {
+  resize: vertical;
+}
