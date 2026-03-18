@@ -93,6 +93,66 @@ const checks: Check[] = [
       assert(result.anchorMatchScore > 0.5, "Personal Loans fixture should have a strong anchor score.");
     },
   },
+  {
+    name: "Fix 1A: internal punctuation + uppercase counts as one error",
+    run: () => {
+      const reference =
+        "Alpha, beta gamma delta epsilon zeta. Eta theta iota kappa lambda mu. Nu xi omicron pi rho sigma. Tau upsilon phi chi psi omega. One two three four five six.";
+      const student =
+        "Alpha. Beta gamma delta epsilon zeta. Eta theta iota kappa lambda mu. Nu xi omicron pi rho sigma. Tau upsilon phi chi psi omega. One two three four five six.";
+      const result = gradeTem4Dictation(reference, student);
+
+      assert(result.errors.length === 1, "Internal punctuation + capitalization should count as one error total.");
+      assert(result.totalDeduction === 0.5, "Internal punctuation + capitalization should deduct only 0.5.");
+      assert(
+        result.errors[0]?.errorType === "punctuation",
+        "The single error should be classified as punctuation.",
+      );
+    },
+  },
+  {
+    name: "Fix 1B: sentence-boundary punctuation + lowercase counts as two errors",
+    run: () => {
+      const reference =
+        "Alpha beta gamma delta epsilon zeta. Eta theta iota kappa lambda mu. Nu xi omicron pi rho sigma. Tau upsilon phi chi psi omega. One two three four five six. Seven eight nine ten eleven twelve.";
+      const student =
+        "Alpha beta gamma delta epsilon zeta, eta theta iota kappa lambda mu. Nu xi omicron pi rho sigma. Tau upsilon phi chi psi omega. One two three four five six. Seven eight nine ten eleven twelve.";
+      const result = gradeTem4Dictation(reference, student);
+
+      assert(result.errors.length === 2, "Sentence-boundary punctuation + lowercase should count as two errors.");
+      assert(result.totalDeduction === 1, "Sentence-boundary punctuation + lowercase should deduct 1.0.");
+    },
+  },
+  {
+    name: "Fix 1C: global no-punctuation problem adds exactly one extra error",
+    run: () => {
+      const reference =
+        "Alpha, beta gamma delta epsilon zeta. Eta theta iota, kappa lambda mu. Nu xi omicron pi, rho sigma. Tau upsilon phi chi, psi omega. One two three four, five six.";
+      const student =
+        "Alpha / beta gamma delta epsilon zeta / Eta theta iota / kappa lambda mu / Nu xi omicron pi / rho sigma / Tau upsilon phi chi / psi omega / One two three four / five six";
+      const result = gradeTem4Dictation(reference, student);
+      const globalErrors = result.errors.filter((error) =>
+        error.mistakeDescription.includes("全文未使用真实标点"),
+      );
+
+      assert(globalErrors.length === 1, "Global no-punctuation/slash substitution should add exactly one extra error.");
+      assert(globalErrors[0]?.deductionApplied === 0.5, "The extra global punctuation error should deduct 0.5 exactly once.");
+    },
+  },
+  {
+    name: "Fix 2: merged correct words count as one missing-space error",
+    run: () => {
+      const reference =
+        "Alpha beta gamma delta may be epsilon zeta. Eta theta iota kappa lambda mu. Nu xi omicron pi rho sigma. Tau upsilon phi chi psi omega. One two three four five six. Seven eight nine ten eleven twelve.";
+      const student =
+        "Alpha beta gamma delta maybe epsilon zeta. Eta theta iota kappa lambda mu. Nu xi omicron pi rho sigma. Tau upsilon phi chi psi omega. One two three four five six. Seven eight nine ten eleven twelve.";
+      const result = gradeTem4Dictation(reference, student);
+
+      assert(result.errors.length === 1, "Merged correct words should produce only one error.");
+      assert(result.errors[0]?.errorType === "missing_space", "Merged correct words should be classified as missing-space.");
+      assert(result.totalDeduction === 0.5, "Merged correct words should deduct only 0.5.");
+    },
+  },
 ];
 
 const run = () => {

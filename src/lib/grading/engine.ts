@@ -50,6 +50,7 @@ interface ClassificationContext {
 }
 
 interface MissingSpaceMatch {
+  startIndex: number;
   consumedUntil: number;
   referenceIndexes: number[];
   studentIndex: number;
@@ -241,55 +242,135 @@ const detectMissingSpacePattern = (
   studentTokens: Token[],
 ): MissingSpaceMatch | null => {
   const operation = operations[index];
-  if (
-    operation.type !== "substitution" ||
-    operation.refIndex === undefined ||
-    operation.studentIndex === undefined
-  ) {
-    return null;
-  }
-
-  const firstReference = referenceTokens[operation.refIndex];
-  const studentToken = studentTokens[operation.studentIndex];
-
-  if (firstReference.kind !== "word" || studentToken.kind !== "word") {
-    return null;
-  }
-
-  const referenceIndexes = [operation.refIndex];
-  let cursor = index + 1;
-
-  while (cursor < operations.length) {
-    const nextOperation = operations[cursor];
-    if (
-      nextOperation.type !== "deletion" ||
-      nextOperation.refIndex === undefined ||
-      referenceTokens[nextOperation.refIndex].kind !== "word"
-    ) {
-      break;
+  const buildMatch = (
+    startIndex: number,
+    endIndex: number,
+    referenceIndexes: number[],
+    studentIndex: number,
+  ): MissingSpaceMatch | null => {
+    if (referenceIndexes.length < 2) {
+      return null;
     }
-    referenceIndexes.push(nextOperation.refIndex);
-    cursor += 1;
-  }
 
-  if (referenceIndexes.length < 2) {
-    return null;
-  }
+    const studentToken = studentTokens[studentIndex];
+    if (!studentToken || studentToken.kind !== "word") {
+      return null;
+    }
 
-  const compactReference = referenceIndexes
-    .map((tokenIndex) => compactWord(referenceTokens[tokenIndex].normalized))
-    .join("");
-  const compactStudent = compactWord(studentToken.normalized);
+    const compactReference = referenceIndexes
+      .map((tokenIndex) => compactWord(referenceTokens[tokenIndex].normalized))
+      .join("");
+    const compactStudent = compactWord(studentToken.normalized);
 
-  if (!compactReference || compactStudent !== compactReference) {
-    return null;
-  }
+    if (!compactReference || compactStudent !== compactReference) {
+      return null;
+    }
 
-  return {
-    consumedUntil: cursor - 1,
-    referenceIndexes,
-    studentIndex: operation.studentIndex,
+    return {
+      startIndex,
+      consumedUntil: endIndex,
+      referenceIndexes,
+      studentIndex,
+    };
   };
+
+  if (
+    operation.type === "substitution" &&
+    operation.refIndex !== undefined &&
+    operation.studentIndex !== undefined
+  ) {
+    const firstReference = referenceTokens[operation.refIndex];
+    const studentToken = studentTokens[operation.studentIndex];
+
+    if (firstReference.kind !== "word" || studentToken.kind !== "word") {
+      return null;
+    }
+
+    const referenceIndexes = [operation.refIndex];
+    let cursor = index + 1;
+
+    while (cursor < operations.length) {
+      const nextOperation = operations[cursor];
+      if (
+        nextOperation.type !== "deletion" ||
+        nextOperation.refIndex === undefined ||
+        referenceTokens[nextOperation.refIndex].kind !== "word"
+      ) {
+        break;
+      }
+      referenceIndexes.push(nextOperation.refIndex);
+      cursor += 1;
+    }
+
+    return buildMatch(index, cursor - 1, referenceIndexes, operation.studentIndex);
+  }
+
+  if (operation.type === "deletion" && operation.refIndex !== undefined) {
+    const referenceIndexes: number[] = [];
+    let cursor = index;
+
+    while (cursor < operations.length) {
+      const nextOperation = operations[cursor];
+      if (
+        nextOperation.type !== "deletion" ||
+        nextOperation.refIndex === undefined ||
+        referenceTokens[nextOperation.refIndex].kind !== "word"
+      ) {
+        break;
+      }
+      referenceIndexes.push(nextOperation.refIndex);
+      cursor += 1;
+    }
+
+    const substitutionOperation = operations[cursor];
+    if (
+      !substitutionOperation ||
+      substitutionOperation.type !== "substitution" ||
+      substitutionOperation.refIndex === undefined ||
+      substitutionOperation.studentIndex === undefined ||
+      referenceTokens[substitutionOperation.refIndex].kind !== "word"
+    ) {
+      return null;
+    }
+
+    referenceIndexes.push(substitutionOperation.refIndex);
+    return buildMatch(index, cursor, referenceIndexes, substitutionOperation.studentIndex);
+  }
+
+  return null;
+};
+
+const chooseGlobalPunctuationPenaltyGroup = (errors: InternalError[]): number => {
+  const deductions = new Map<number, number>();
+
+  for (let groupId = 1; groupId <= GROUP_COUNT; groupId += 1) {
+    deductions.set(groupId, 0);
+  }
+
+  errors.forEach((error) => {
+    deductions.set(
+      error.groupId,
+      (deductions.get(error.groupId) ?? 0) + error.deductionBeforeCap,
+    );
+  });
+
+  return Array.from(deductions.entries()).sort(
+    (left, right) => left[1] - right[1] || left[0] - right[0],
+  )[0][0];
+};
+
+const detectGlobalPunctuationFailure = (
+  referenceTokens: Token[],
+  studentTokens: Token[],
+): boolean => {
+  const referencePunctuationCount = referenceTokens.filter(
+    (token) => token.kind === "punct",
+  ).length;
+  const studentPunctuationCount = studentTokens.filter(
+    (token) => token.kind === "punct",
+  ).length;
+
+  return referencePunctuationCount > 0 && studentPunctuationCount === 0;
 };
 
 const areWordSequencesReordered = (
@@ -625,6 +706,33 @@ const classifyErrors = ({
         }),
       );
     }
+  }
+
+  if (detectGlobalPunctuationFailure(referenceTokens, studentTokens)) {
+    const groupId = chooseGlobalPunctuationPenaltyGroup(errors);
+    const firstReferencePunctuationIndex = referenceTokens.findIndex(
+      (token) => token.kind === "punct",
+    );
+    const referenceContextTokens =
+      firstReferencePunctuationIndex >= 0
+        ? buildContextTokens(referenceTokens, [firstReferencePunctuationIndex])
+        : [];
+    const firstStudentWordIndex = studentTokens.findIndex((token) => token.kind === "word");
+    const studentContextTokens =
+      firstStudentWordIndex >= 0
+        ? clearHighlights(buildContextTokens(studentTokens, [firstStudentWordIndex]))
+        : [];
+
+    errors.push(
+      createError("punctuation", {
+        idSeed: `G${groupId}-PUNC-GLOBAL`,
+        groupId,
+        referenceContextTokens,
+        studentContextTokens,
+        mistakeDescription: "全文未使用真实标点，出现了统一缺失或斜杠替代的情况",
+        extraExplanation: "全文层面的无真实标点/斜杠替代问题，额外计1处标点错误。",
+      }),
+    );
   }
 
   return applyDisplacementHeuristic(
