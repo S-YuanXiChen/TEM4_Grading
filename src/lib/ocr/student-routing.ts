@@ -81,10 +81,15 @@ const classifyStudentProbeResult = (probe: OcrResult): StudentOcrRoutingDecision
   };
 };
 
+const shouldEscalateStudentOcrToGoogleVision = (
+  probe: OcrResult,
+): StudentOcrRoutingDecision => classifyStudentProbeResult(probe);
+
 export const studentHybridOcrProvider: OcrProvider = {
   async recognize(file: File): Promise<OcrResult> {
     const probe = await localBrowserOcrProvider.recognize(file);
-    const decision = classifyStudentProbeResult(probe);
+    // Gate Google Vision before the request is sent to /api/ocr/student.
+    const decision = shouldEscalateStudentOcrToGoogleVision(probe);
 
     if (decision.mode === "local") {
       return {
@@ -108,4 +113,4 @@ export const studentHybridOcrProvider: OcrProvider = {
   },
 };
 
-export { classifyStudentProbeResult };
+export { classifyStudentProbeResult, shouldEscalateStudentOcrToGoogleVision };

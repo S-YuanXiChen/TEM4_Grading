@@ -19,6 +19,11 @@ interface VisionApiResponse {
   }>;
 }
 
+interface VisionRequestConfig {
+  endpoint: string;
+  headers: Record<string, string>;
+}
+
 const getGoogleAuth = (): GoogleAuth => {
   const projectId = process.env.GOOGLE_CLOUD_PROJECT;
   const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
@@ -58,16 +63,35 @@ const getAccessToken = async (): Promise<string> => {
   return token;
 };
 
-export const recognizeStudentImageWithGoogleVision = async (params: {
-  base64Image: string;
-}): Promise<string> => {
+const getVisionRequestConfig = async (): Promise<VisionRequestConfig> => {
+  const apiKey = process.env.GOOGLE_VISION_API_KEY?.trim();
+
+  if (apiKey) {
+    return {
+      endpoint: `${VISION_ENDPOINT}?key=${encodeURIComponent(apiKey)}`,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    };
+  }
+
   const accessToken = await getAccessToken();
-  const response = await fetch(VISION_ENDPOINT, {
-    method: "POST",
+  return {
+    endpoint: VISION_ENDPOINT,
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
+  };
+};
+
+export const recognizeStudentImageWithGoogleVision = async (params: {
+  base64Image: string;
+}): Promise<string> => {
+  const requestConfig = await getVisionRequestConfig();
+  const response = await fetch(requestConfig.endpoint, {
+    method: "POST",
+    headers: requestConfig.headers,
     body: JSON.stringify({
       requests: [
         {
