@@ -12,10 +12,9 @@ import {
   analyzeSuspiciousOcrIssues,
   recognizeImageText,
   type OcrSuggestion,
+  type OcrTarget,
   type OcrWordConfidence,
 } from "@/lib/ocr";
-
-type OcrTarget = "reference" | "student";
 
 const buildPanelStatus = (params: {
   readOnly: boolean;
@@ -183,7 +182,7 @@ function HomeContent() {
     setOcrLoadingTarget(target);
 
     try {
-      const response = await recognizeImageText(file);
+      const response = await recognizeImageText(file, target);
       const noteWithCleanup =
         response.cleanupSummary && response.cleanupSummary.length > 0
           ? `${response.note ?? "图片转文字已完成。"} ${response.cleanupSummary.join("；")}。`
@@ -212,8 +211,10 @@ function HomeContent() {
         );
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "图片转文字失败";
-      setErrorMessage(`图片转文字失败：${message}`);
+      const fallbackMessage =
+        target === "student" ? "学生作答高精度 OCR 失败" : "参考答案本地 OCR 失败";
+      const message = error instanceof Error ? error.message : fallbackMessage;
+      setErrorMessage(message.startsWith(fallbackMessage) ? message : `${fallbackMessage}：${message}`);
     } finally {
       setOcrLoadingTarget(null);
     }
@@ -350,7 +351,7 @@ function HomeContent() {
       <section className="mt-6 grid gap-4 md:grid-cols-2">
         <TextOcrPanel
           title="参考答案"
-          subtitle="上传参考答案图片，转换后可手动修改文本。"
+          subtitle="上传参考答案图片，默认使用本地 OCR，转换后可手动修改文本。"
           helperText="如无需使用图片，可直接于文本框输入"
           file={referenceFile}
           imageDataUrl={referenceImageDataUrl}
@@ -394,7 +395,7 @@ function HomeContent() {
 
         <TextOcrPanel
           title="学生作答"
-          subtitle="上传学生作答图片，转换后可手动修改文本。"
+          subtitle="上传学生作答图片，默认使用高精度 OCR，转换后可手动修改文本。"
           helperText="请确保学生作答的首句不包含无需批改的前置句"
           file={studentFile}
           imageDataUrl={studentImageDataUrl}

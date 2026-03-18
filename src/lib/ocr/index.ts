@@ -1,8 +1,8 @@
 import { analyzeSuspiciousOcrIssues } from "./assistance";
-import { mockOcrProvider } from "./mock-provider";
+import { googleVisionClientOcrProvider } from "./google-vision-client-provider";
+import { localBrowserOcrProvider } from "./local-browser-provider";
 import { applyLowRiskOcrCleanup } from "./post-process";
-import { tesseractOcrProvider } from "./tesseract-provider";
-import type { OcrResult } from "./types";
+import type { OcrProvider, OcrResult, OcrTarget } from "./types";
 
 const applyPostProcessing = (result: OcrResult): OcrResult => ({
   ...result,
@@ -15,22 +15,17 @@ const applyPostProcessing = (result: OcrResult): OcrResult => ({
   })(),
 });
 
-export const recognizeImageText = async (file: File): Promise<OcrResult> => {
-  try {
-    const result = await tesseractOcrProvider.recognize(file);
-    if (!result.text.trim()) {
-      const fallbackResult = await mockOcrProvider({ reason: "OCR返回为空" }).recognize(file);
-      return applyPostProcessing(fallbackResult);
-    }
+const getProviderByTarget = (target: OcrTarget): OcrProvider =>
+  target === "student" ? googleVisionClientOcrProvider : localBrowserOcrProvider;
 
-    return applyPostProcessing(result);
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "无法加载OCR引擎";
-    const fallbackResult = await mockOcrProvider({ reason: message }).recognize(file);
-    return applyPostProcessing(fallbackResult);
-  }
+export const recognizeImageText = async (
+  file: File,
+  target: OcrTarget,
+): Promise<OcrResult> => {
+  const provider = getProviderByTarget(target);
+  const result = await provider.recognize(file);
+  return applyPostProcessing(result);
 };
 
 export { analyzeSuspiciousOcrIssues };
-export type { OcrResult, OcrSuggestion, OcrWordConfidence } from "./types";
+export type { OcrResult, OcrSuggestion, OcrTarget, OcrWordConfidence } from "./types";

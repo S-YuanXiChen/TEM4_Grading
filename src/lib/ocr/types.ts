@@ -1,4 +1,6 @@
-export type OcrSource = "tesseract" | "mock";
+export type OcrTarget = "reference" | "student";
+
+export type OcrSource = "tesseract" | "mock" | "google_vision";
 
 export interface OcrWordConfidence {
   raw: string;

@@ -10,6 +10,7 @@
     "check:grading": "tsx scripts/grading-fixtures.ts"
   },
   "dependencies": {
+    "google-auth-library": "^10.6.2",
     "next": "16.1.7",
     "react": "19.2.3",
     "react-dom": "19.2.3",
