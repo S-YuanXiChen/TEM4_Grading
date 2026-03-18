@@ -29,6 +29,7 @@ export interface OcrResult {
   text: string;
   source: OcrSource;
   note?: string;
+  statusLabel?: string;
   cleanupSummary?: string[];
   wordConfidences?: OcrWordConfidence[];
 }

@@ -1,7 +1,7 @@
 import { analyzeSuspiciousOcrIssues } from "./assistance";
-import { googleVisionClientOcrProvider } from "./google-vision-client-provider";
 import { localBrowserOcrProvider } from "./local-browser-provider";
 import { applyLowRiskOcrCleanup } from "./post-process";
+import { studentHybridOcrProvider } from "./student-routing";
 import type { OcrProvider, OcrResult, OcrTarget } from "./types";
 
 const applyPostProcessing = (result: OcrResult): OcrResult => ({
@@ -16,7 +16,7 @@ const applyPostProcessing = (result: OcrResult): OcrResult => ({
 });
 
 const getProviderByTarget = (target: OcrTarget): OcrProvider =>
-  target === "student" ? googleVisionClientOcrProvider : localBrowserOcrProvider;
+  target === "student" ? studentHybridOcrProvider : localBrowserOcrProvider;
 
 export const recognizeImageText = async (
   file: File,

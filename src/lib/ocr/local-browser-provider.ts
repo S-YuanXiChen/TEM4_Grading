@@ -13,6 +13,7 @@ export const localBrowserOcrProvider: OcrProvider = {
       return {
         ...result,
         note: "当前使用本地 OCR 识别参考答案，请继续人工核对文本。",
+        statusLabel: "本地识别已完成",
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : "无法加载OCR引擎";

@@ -18,7 +18,7 @@ import {
 
 const buildPanelStatus = (params: {
   readOnly: boolean;
-  loading: boolean;
+  statusLabel: string;
   file: File | null;
   text: string;
   suggestions: OcrSuggestion[];
@@ -26,8 +26,8 @@ const buildPanelStatus = (params: {
   if (params.readOnly) {
     return "历史记录快照，只读查看";
   }
-  if (params.loading) {
-    return "图片转文字进行中";
+  if (params.statusLabel) {
+    return params.statusLabel;
   }
   if (params.text.trim()) {
     return params.suggestions.length > 0
@@ -95,6 +95,8 @@ function HomeContent() {
   const [studentNote, setStudentNote] = useState("");
   const [referenceSuggestions, setReferenceSuggestions] = useState<OcrSuggestion[]>([]);
   const [studentSuggestions, setStudentSuggestions] = useState<OcrSuggestion[]>([]);
+  const [referenceStatusLabel, setReferenceStatusLabel] = useState("");
+  const [studentStatusLabel, setStudentStatusLabel] = useState("");
   const [studentOcrWordConfidences, setStudentOcrWordConfidences] = useState<
     OcrWordConfidence[]
   >([]);
@@ -137,6 +139,8 @@ function HomeContent() {
       setStudentNote("");
       setReferenceSuggestions([]);
       setStudentSuggestions([]);
+      setReferenceStatusLabel("");
+      setStudentStatusLabel("");
       setStudentOcrWordConfidences([]);
       setStudentAssistanceActive(false);
       setErrorMessage("");
@@ -160,6 +164,8 @@ function HomeContent() {
     setStudentNote("");
     setReferenceSuggestions([]);
     setStudentSuggestions([]);
+    setReferenceStatusLabel("");
+    setStudentStatusLabel("");
     setStudentOcrWordConfidences([]);
     setStudentAssistanceActive(false);
     setResult(null);
@@ -180,6 +186,12 @@ function HomeContent() {
 
     setErrorMessage("");
     setOcrLoadingTarget(target);
+    setReferenceStatusLabel((current) =>
+      target === "reference" ? "正在进行本地识别" : current,
+    );
+    setStudentStatusLabel((current) =>
+      target === "student" ? "正在判断文本类型" : current,
+    );
 
     try {
       const response = await recognizeImageText(file, target);
@@ -191,6 +203,7 @@ function HomeContent() {
       if (target === "reference") {
         setReferenceText(response.text);
         setReferenceNote(noteWithCleanup);
+        setReferenceStatusLabel(response.statusLabel || "本地识别已完成");
         setReferenceSuggestions(
           analyzeSuspiciousOcrIssues({
             text: response.text,
@@ -200,6 +213,7 @@ function HomeContent() {
       } else {
         setStudentText(response.text);
         setStudentNote(noteWithCleanup);
+        setStudentStatusLabel(response.statusLabel || "高精度识别已完成");
         setStudentOcrWordConfidences(response.wordConfidences ?? []);
         setStudentAssistanceActive(true);
         setStudentSuggestions(
@@ -212,8 +226,13 @@ function HomeContent() {
       }
     } catch (error) {
       const fallbackMessage =
-        target === "student" ? "学生作答高精度 OCR 失败" : "参考答案本地 OCR 失败";
+        target === "student" ? "学生作答识别失败" : "参考答案本地 OCR 失败";
       const message = error instanceof Error ? error.message : fallbackMessage;
+      if (target === "reference") {
+        setReferenceStatusLabel("识别失败");
+      } else {
+        setStudentStatusLabel("识别失败");
+      }
       setErrorMessage(message.startsWith(fallbackMessage) ? message : `${fallbackMessage}：${message}`);
     } finally {
       setOcrLoadingTarget(null);
@@ -259,6 +278,7 @@ function HomeContent() {
       setReferenceText(nextText);
       setReferenceSuggestions([]);
       setReferenceNote("已应用一条 OCR 建议，请继续人工核对其余内容。");
+      setReferenceStatusLabel("本地识别结果已手动调整");
       return;
     }
 
@@ -278,6 +298,7 @@ function HomeContent() {
     );
     setStudentAssistanceActive(true);
     setStudentNote("已应用一条 OCR 建议，请继续人工核对文本后再批改。");
+    setStudentStatusLabel("学生识别结果已手动调整");
   };
 
   const handleGrade = async () => {
@@ -362,7 +383,7 @@ function HomeContent() {
           note={referenceNote}
           statusText={buildPanelStatus({
             readOnly: isHistoryReadOnly,
-            loading: ocrLoadingTarget === "reference",
+            statusLabel: referenceStatusLabel,
             file: referenceFile,
             text: referenceText,
             suggestions: referenceSuggestions,
@@ -372,6 +393,7 @@ function HomeContent() {
             setReferenceFile(file);
             setReferenceNote("");
             setReferenceSuggestions([]);
+            setReferenceStatusLabel("");
             if (!file) {
               setReferenceImageDataUrl(null);
               return;
@@ -388,6 +410,7 @@ function HomeContent() {
           onTextChange={(value) => {
             setReferenceText(value);
             setReferenceSuggestions([]);
+            setReferenceStatusLabel(value.trim() ? "文本已手动录入/修改" : "");
           }}
           onRunOcr={() => runOcr("reference")}
           onApplySuggestion={(suggestion) => handleApplySuggestion("reference", suggestion)}
@@ -395,7 +418,7 @@ function HomeContent() {
 
         <TextOcrPanel
           title="学生作答"
-          subtitle="上传学生作答图片，默认使用高精度 OCR，转换后可手动修改文本。"
+          subtitle="上传学生作答图片，系统会先判断是否为印刷体，再决定使用本地或高精度 OCR。"
           helperText="请确保学生作答的首句不包含无需批改的前置句"
           file={studentFile}
           imageDataUrl={studentImageDataUrl}
@@ -406,7 +429,7 @@ function HomeContent() {
           note={studentNote}
           statusText={buildPanelStatus({
             readOnly: isHistoryReadOnly,
-            loading: ocrLoadingTarget === "student",
+            statusLabel: studentStatusLabel,
             file: studentFile,
             text: studentText,
             suggestions: studentSuggestions,
@@ -416,6 +439,7 @@ function HomeContent() {
             setStudentFile(file);
             setStudentNote("");
             setStudentSuggestions([]);
+            setStudentStatusLabel("");
             setStudentOcrWordConfidences([]);
             setStudentAssistanceActive(false);
             if (!file) {
@@ -434,6 +458,7 @@ function HomeContent() {
           onTextChange={(value) => {
             setStudentText(value);
             setStudentSuggestions([]);
+            setStudentStatusLabel(value.trim() ? "文本已手动录入/修改" : "");
             setStudentAssistanceActive(false);
           }}
           onRunOcr={() => runOcr("student")}

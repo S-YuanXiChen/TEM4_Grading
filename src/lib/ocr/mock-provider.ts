@@ -21,6 +21,7 @@ export const mockOcrProvider = (options: MockOptions = {}): OcrProvider => ({
       text: lines.join("\n"),
       source: "mock",
       note: "当前使用占位结果，请手动核对文本。",
+      statusLabel: "识别失败，已回退为占位结果",
     };
   },
 });

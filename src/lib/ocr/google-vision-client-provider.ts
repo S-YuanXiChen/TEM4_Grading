@@ -24,6 +24,7 @@ export const googleVisionClientOcrProvider: OcrProvider = {
       rawText: typeof payload?.rawText === "string" ? payload.rawText : "",
       text: typeof payload?.text === "string" ? payload.text : "",
       source: "google_vision",
+      statusLabel: "高精度识别已完成",
       note:
         typeof payload?.note === "string"
           ? payload.note
