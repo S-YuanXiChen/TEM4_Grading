@@ -4,7 +4,6 @@ const STUDENT_OCR_ROUTE = "/api/ocr/student";
 
 export const googleVisionClientOcrProvider: OcrProvider = {
   async recognize(file: File): Promise<OcrResult> {
-    // This provider should only run after the student-side printed/non-printed gate.
     const formData = new FormData();
     formData.append("file", file);
 

@@ -190,7 +190,7 @@ function HomeContent() {
       target === "reference" ? "正在进行本地识别" : current,
     );
     setStudentStatusLabel((current) =>
-      target === "student" ? "正在判断文本类型" : current,
+      target === "student" ? "正在进行高精度识别" : current,
     );
 
     try {
@@ -418,7 +418,7 @@ function HomeContent() {
 
         <TextOcrPanel
           title="学生作答"
-          subtitle="上传学生作答图片，系统会先判断是否为印刷体，再决定使用本地或高精度 OCR。"
+          subtitle="上传学生作答图片，系统会直接使用高精度 OCR，转换后可手动修改文本。"
           helperText="请确保学生作答的首句不包含无需批改的前置句"
           file={studentFile}
           imageDataUrl={studentImageDataUrl}
