@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { recognizeStudentImageWithGoogleVision } from "@/lib/ocr/google-vision-server";
+import { recognizeStudentImageWithQwenOcr } from "@/lib/ocr/qwen-ocr-server";
 
 export const runtime = "nodejs";
 
@@ -15,8 +15,9 @@ export async function POST(request: Request) {
 
     const arrayBuffer = await file.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString("base64");
-    const text = await recognizeStudentImageWithGoogleVision({
+    const text = await recognizeStudentImageWithQwenOcr({
       base64Image,
+      mimeType: file.type || "image/jpeg",
     });
 
     return NextResponse.json({
