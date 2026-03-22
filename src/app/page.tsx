@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -11,6 +11,7 @@ import { createGradingRecordRepository } from "@/lib/history";
 import {
   analyzeSuspiciousOcrIssues,
   recognizeImageText,
+  type OcrMode,
   type OcrSuggestion,
   type OcrTarget,
   type OcrWordConfidence,
@@ -24,20 +25,20 @@ const buildPanelStatus = (params: {
   suggestions: OcrSuggestion[];
 }): string => {
   if (params.readOnly) {
-    return "历史记录快照，只读查看";
+    return "历史记录只读模式";
   }
   if (params.statusLabel) {
     return params.statusLabel;
   }
   if (params.text.trim()) {
     return params.suggestions.length > 0
-      ? `已生成文本，并发现 ${params.suggestions.length} 处疑似识别问题`
-      : "已生成或录入文本，可直接人工核对";
+      ? `已生成文本，发现 ${params.suggestions.length} 条疑似识别问题`
+      : "已生成文本，可继续人工核对";
   }
   if (params.file) {
     return `已选择图片：${params.file.name}`;
   }
-  return "尚未上传图片或输入文本";
+  return "请先上传图片";
 };
 
 const fileToDataUrl = (file: File): Promise<string> =>
@@ -56,7 +57,7 @@ const fileToDataUrl = (file: File): Promise<string> =>
 
 const buildRecordTitle = (studentText: string, score: number): string => {
   const short = studentText.replace(/\s+/g, " ").trim().slice(0, 36);
-  return `${short || "未命名批改"}（${score.toFixed(1)}）`;
+  return `${short || "学生作答"} · ${score.toFixed(1)}分`;
 };
 
 const buildRecordSummary = (result: GradingResult): string =>
@@ -124,7 +125,7 @@ function HomeContent() {
       }
 
       if (!record) {
-        setErrorMessage("未找到该历史记录，可能已被删除。");
+        setErrorMessage("未找到对应的历史记录。");
         return;
       }
 
@@ -173,37 +174,39 @@ function HomeContent() {
     router.push("/");
   };
 
-  const runOcr = async (target: OcrTarget) => {
+  const runOcr = async (target: OcrTarget, mode: OcrMode = "default") => {
     if (isHistoryReadOnly) {
       return;
     }
 
     const file = target === "reference" ? referenceFile : studentFile;
     if (!file) {
-      setErrorMessage("请先上传图片，再进行图片转文字。");
+      setErrorMessage("请先上传图片，再执行图片转文字。");
       return;
     }
 
     setErrorMessage("");
     setOcrLoadingTarget(target);
-    setReferenceStatusLabel((current) =>
-      target === "reference" ? "正在进行本地识别" : current,
-    );
-    setStudentStatusLabel((current) =>
-      target === "student" ? "正在进行高精度识别" : current,
-    );
+
+    if (target === "reference") {
+      setReferenceStatusLabel(mode === "qwen" ? "正在进行高精度识别" : "正在进行本地识别");
+    } else {
+      setStudentStatusLabel("正在进行高精度识别");
+    }
 
     try {
-      const response = await recognizeImageText(file, target);
+      const response = await recognizeImageText(file, target, mode);
       const noteWithCleanup =
         response.cleanupSummary && response.cleanupSummary.length > 0
-          ? `${response.note ?? "图片转文字已完成。"} ${response.cleanupSummary.join("；")}。`
+          ? `${response.note ?? "已完成图片转文字。"} 已执行：${response.cleanupSummary.join("、")}`
           : response.note ?? "";
 
       if (target === "reference") {
         setReferenceText(response.text);
         setReferenceNote(noteWithCleanup);
-        setReferenceStatusLabel(response.statusLabel || "本地识别已完成");
+        setReferenceStatusLabel(
+          response.statusLabel || (mode === "qwen" ? "高精度识别已完成" : "本地识别已完成"),
+        );
         setReferenceSuggestions(
           analyzeSuspiciousOcrIssues({
             text: response.text,
@@ -226,13 +229,19 @@ function HomeContent() {
       }
     } catch (error) {
       const fallbackMessage =
-        target === "student" ? "学生作答识别失败" : "参考答案本地 OCR 失败";
+        target === "student"
+          ? "学生作答 OCR 失败"
+          : mode === "qwen"
+            ? "参考答案高精度 OCR 失败"
+            : "参考答案本地 OCR 失败";
       const message = error instanceof Error ? error.message : fallbackMessage;
+
       if (target === "reference") {
         setReferenceStatusLabel("识别失败");
       } else {
         setStudentStatusLabel("识别失败");
       }
+
       setErrorMessage(message.startsWith(fallbackMessage) ? message : `${fallbackMessage}：${message}`);
     } finally {
       setOcrLoadingTarget(null);
@@ -272,19 +281,20 @@ function HomeContent() {
     if (target === "reference") {
       const nextText = replaceSuggestionText(referenceText, suggestion);
       if (!nextText) {
-        setErrorMessage("参考答案文本已发生变化，请重新核对疑似识别问题。");
+        setErrorMessage("参考答案文本已变化，请重新执行图片转文字后再应用建议。");
         return;
       }
+
       setReferenceText(nextText);
       setReferenceSuggestions([]);
-      setReferenceNote("已应用一条 OCR 建议，请继续人工核对其余内容。");
-      setReferenceStatusLabel("本地识别结果已手动调整");
+      setReferenceNote("已手动应用 OCR 建议，请继续人工核对文本。");
+      setReferenceStatusLabel("参考答案文本已更新");
       return;
     }
 
     const nextText = replaceSuggestionText(studentText, suggestion);
     if (!nextText) {
-      setErrorMessage("学生作答文本已发生变化，请重新核对疑似识别问题。");
+      setErrorMessage("学生作答文本已变化，请重新检查疑似识别问题后再应用建议。");
       return;
     }
 
@@ -297,8 +307,8 @@ function HomeContent() {
       }),
     );
     setStudentAssistanceActive(true);
-    setStudentNote("已应用一条 OCR 建议，请继续人工核对文本后再批改。");
-    setStudentStatusLabel("学生识别结果已手动调整");
+    setStudentNote("已手动应用 OCR 建议，请继续人工核对学生作答文本。");
+    setStudentStatusLabel("学生作答文本已更新");
   };
 
   const handleGrade = async () => {
@@ -309,11 +319,11 @@ function HomeContent() {
     setErrorMessage("");
 
     if (!referenceText.trim()) {
-      setErrorMessage("请先提供参考答案英语文本（可手动输入或由图片转文字得到）。");
+      setErrorMessage("请先输入或识别参考答案文本后，再开始批改。");
       return;
     }
     if (!studentText.trim()) {
-      setErrorMessage("请先提供学生作答英语文本（可手动输入或由图片转文字得到）。");
+      setErrorMessage("请先输入或识别学生作答文本后，再开始批改。");
       return;
     }
 
@@ -372,12 +382,12 @@ function HomeContent() {
       <section className="mt-6 grid gap-4 md:grid-cols-2">
         <TextOcrPanel
           title="参考答案"
-          subtitle="上传参考答案图片，默认使用本地 OCR，转换后可手动修改文本。"
+          subtitle="上传参考答案图片后，可选择本地 OCR 或高精度 OCR，转换后仍可手动修改文本。"
           helperText="如无需使用图片，可直接于文本框输入"
           file={referenceFile}
           imageDataUrl={referenceImageDataUrl}
           text={referenceText}
-          placeholder="图片转文字结果会显示在这里，您可继续修改。"
+          placeholder="图片转文字结果会显示在这里，您也可以直接粘贴或输入参考答案。"
           loading={ocrLoadingTarget === "reference"}
           readOnly={isHistoryReadOnly}
           note={referenceNote}
@@ -404,26 +414,41 @@ function HomeContent() {
               })
               .catch(() => {
                 setReferenceImageDataUrl(null);
-                setErrorMessage("读取参考答案图片失败，请重试。");
+                setErrorMessage("参考答案图片读取失败，请重新选择图片。");
               });
           }}
           onTextChange={(value) => {
             setReferenceText(value);
             setReferenceSuggestions([]);
-            setReferenceStatusLabel(value.trim() ? "文本已手动录入/修改" : "");
+            setReferenceStatusLabel(value.trim() ? "文本已手动修改" : "");
           }}
-          onRunOcr={() => runOcr("reference")}
+          ocrActions={[
+            {
+              label: "图片转文字（快）",
+              loadingLabel: "转换中...",
+              onClick: async () => runOcr("reference", "local"),
+              disabled: !referenceFile,
+              loading: ocrLoadingTarget === "reference",
+            },
+            {
+              label: "图片转文字（准）",
+              loadingLabel: "转换中...",
+              onClick: async () => runOcr("reference", "qwen"),
+              disabled: !referenceFile,
+              loading: ocrLoadingTarget === "reference",
+            },
+          ]}
           onApplySuggestion={(suggestion) => handleApplySuggestion("reference", suggestion)}
         />
 
         <TextOcrPanel
           title="学生作答"
-          subtitle="上传学生作答图片，系统会直接使用高精度 OCR，转换后可手动修改文本。"
+          subtitle="上传学生作答图片后，使用高精度 OCR 识别，转换后仍可手动修改文本。"
           helperText="请确保学生作答的首句不包含无需批改的前置句"
           file={studentFile}
           imageDataUrl={studentImageDataUrl}
           text={studentText}
-          placeholder="图片转文字结果会显示在这里，您可继续修改。"
+          placeholder="图片转文字结果会显示在这里，您也可以直接粘贴或输入学生作答。"
           loading={ocrLoadingTarget === "student"}
           readOnly={isHistoryReadOnly}
           note={studentNote}
@@ -452,16 +477,24 @@ function HomeContent() {
               })
               .catch(() => {
                 setStudentImageDataUrl(null);
-                setErrorMessage("读取学生作答图片失败，请重试。");
+                setErrorMessage("学生作答图片读取失败，请重新选择图片。");
               });
           }}
           onTextChange={(value) => {
             setStudentText(value);
             setStudentSuggestions([]);
-            setStudentStatusLabel(value.trim() ? "文本已手动录入/修改" : "");
+            setStudentStatusLabel(value.trim() ? "文本已手动修改" : "");
             setStudentAssistanceActive(false);
           }}
-          onRunOcr={() => runOcr("student")}
+          ocrActions={[
+            {
+              label: "图片转文字",
+              loadingLabel: "转换中...",
+              onClick: async () => runOcr("student"),
+              disabled: !studentFile,
+              loading: ocrLoadingTarget === "student",
+            },
+          ]}
           onApplySuggestion={(suggestion) => handleApplySuggestion("student", suggestion)}
         />
       </section>
@@ -470,7 +503,7 @@ function HomeContent() {
         <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <p className="text-sm text-muted">
-              请确保学生作答的首句不包含无需批改的前置句。最终批改仅使用当前文本框中的内容，不会自动采用 OCR 建议。
+              请确保学生作答的首句不包含无需批改的前置句
             </p>
             <button
               type="button"
@@ -492,7 +525,7 @@ function HomeContent() {
         </section>
       ) : (
         <section className="mt-6 rounded-2xl border border-border bg-card p-5 text-sm text-muted shadow-sm">
-          当前为历史记录快照，已禁用上传图片、图片转文字与开始批改。请点击“新建批改”进入可编辑页面。
+          当前页面为历史记录只读视图，可查看已保存的图片、文本和批改结果，但不能重新上传、识别或再次批改。
           {errorMessage ? (
             <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {errorMessage}
@@ -506,7 +539,7 @@ function HomeContent() {
           <GradingResultView result={result} />
         ) : (
           <div className="rounded-2xl border border-dashed border-border bg-card p-6 text-sm text-muted">
-            结果区为空。请先准备两段英语文本，再点击“开始批改”。
+            完成图片转文字并确认文本后，点击“开始批改”即可在这里查看评分结果。
           </div>
         )}
       </section>

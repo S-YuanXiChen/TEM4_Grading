@@ -1,9 +1,17 @@
-"use client";
+﻿"use client";
 
 import Image from "next/image";
 import { useRef } from "react";
 
 import type { OcrSuggestion } from "@/lib/ocr";
+
+interface OcrAction {
+  label: string;
+  loadingLabel: string;
+  onClick: () => Promise<void>;
+  disabled?: boolean;
+  loading?: boolean;
+}
 
 interface TextOcrPanelProps {
   title: string;
@@ -18,9 +26,9 @@ interface TextOcrPanelProps {
   note?: string;
   statusText?: string;
   suggestions?: OcrSuggestion[];
+  ocrActions?: OcrAction[];
   onFileChange: (file: File | null) => void;
   onTextChange: (value: string) => void;
-  onRunOcr: () => Promise<void>;
   onApplySuggestion?: (suggestion: OcrSuggestion) => void;
 }
 
@@ -37,9 +45,9 @@ export function TextOcrPanel({
   note,
   statusText,
   suggestions = [],
+  ocrActions = [],
   onFileChange,
   onTextChange,
-  onRunOcr,
   onApplySuggestion,
 }: TextOcrPanelProps) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -58,48 +66,33 @@ export function TextOcrPanel({
       ) : null}
 
       {!readOnly ? (
-        <>
-          <div className="mb-4 rounded-xl border border-dashed border-border bg-accent-soft/30 p-4">
-            <label className="mb-2 block text-sm font-medium text-foreground">
-              上传图片
-            </label>
-            <input
-              type="file"
-              accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif"
-              className="block w-full text-sm text-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-accent file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:cursor-pointer hover:file:opacity-90"
-              onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
-            />
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
-            />
-            <button
-              type="button"
-              onClick={() => cameraInputRef.current?.click()}
-              className="mt-3 inline-flex rounded-lg border border-border bg-white px-3 py-2 text-xs font-medium text-foreground"
-            >
-              拍照上传
-            </button>
-            <p className="mt-2 text-xs text-muted">
-              {file ? `已选择：${file.name}` : "尚未选择图片文件"}
-            </p>
-          </div>
-
+        <div className="mb-4 rounded-xl border border-dashed border-border bg-accent-soft/30 p-4">
+          <label className="mb-2 block text-sm font-medium text-foreground">上传图片</label>
+          <input
+            type="file"
+            accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif"
+            className="block w-full text-sm text-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-accent file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:cursor-pointer hover:file:opacity-90"
+            onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
+          />
           <button
             type="button"
-            onClick={() => {
-              void onRunOcr();
-            }}
-            disabled={loading || !file}
-            className="mb-3 inline-flex h-10 items-center rounded-lg bg-accent px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => cameraInputRef.current?.click()}
+            className="mt-3 inline-flex rounded-lg border border-border bg-white px-3 py-2 text-xs font-medium text-foreground"
           >
-            {loading ? "转换中..." : "图片转文字"}
+            拍照上传
           </button>
-        </>
+          <p className="mt-2 text-xs text-muted">
+            {file ? `已选择文件：${file.name}` : "暂未选择图片"}
+          </p>
+        </div>
       ) : null}
 
       {imageDataUrl ? (
@@ -120,6 +113,24 @@ export function TextOcrPanel({
               className="max-h-48 w-full rounded-lg object-contain"
             />
           </a>
+        </div>
+      ) : null}
+
+      {!readOnly && ocrActions.length > 0 ? (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {ocrActions.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              onClick={() => {
+                void action.onClick();
+              }}
+              disabled={loading || action.disabled || action.loading}
+              className="inline-flex h-10 items-center rounded-lg bg-accent px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading || action.loading ? action.loadingLabel : action.label}
+            </button>
+          ))}
         </div>
       ) : null}
 
@@ -145,7 +156,7 @@ export function TextOcrPanel({
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm font-medium text-amber-900">疑似识别问题</p>
           <p className="mt-1 text-xs leading-5 text-amber-800">
-            以下仅为 OCR 辅助提示，不会自动改写文本；批改只使用您在文本框中最终确认的内容。
+            下列内容仅作为 OCR 辅助提示，不会自动改写文本。最终批改始终以文本框中的当前内容为准。
           </p>
           <ul className="mt-3 space-y-3 text-sm text-foreground">
             {suggestions.map((suggestion) => (
@@ -153,7 +164,7 @@ export function TextOcrPanel({
                 <p>
                   <span className="font-medium">{suggestion.sourceText}</span>
                   {suggestion.suggestedText ? (
-                    <span className="text-muted"> 建议核对为 {suggestion.suggestedText}</span>
+                    <span className="text-muted"> 建议：{suggestion.suggestedText}</span>
                   ) : null}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-muted">{suggestion.reason}</p>
