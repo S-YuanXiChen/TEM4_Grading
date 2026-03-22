@@ -11,7 +11,6 @@ import { createGradingRecordRepository } from "@/lib/history";
 import {
   analyzeSuspiciousOcrIssues,
   recognizeImageText,
-  type OcrMode,
   type OcrSuggestion,
   type OcrTarget,
   type OcrWordConfidence,
@@ -174,7 +173,7 @@ function HomeContent() {
     router.push("/");
   };
 
-  const runOcr = async (target: OcrTarget, mode: OcrMode = "default") => {
+  const runOcr = async (target: OcrTarget) => {
     if (isHistoryReadOnly) {
       return;
     }
@@ -189,13 +188,13 @@ function HomeContent() {
     setOcrLoadingTarget(target);
 
     if (target === "reference") {
-      setReferenceStatusLabel(mode === "qwen" ? "正在进行高精度识别" : "正在进行本地识别");
+      setReferenceStatusLabel("正在进行高精度识别");
     } else {
       setStudentStatusLabel("正在进行高精度识别");
     }
 
     try {
-      const response = await recognizeImageText(file, target, mode);
+      const response = await recognizeImageText(file, target);
       const noteWithCleanup =
         response.cleanupSummary && response.cleanupSummary.length > 0
           ? `${response.note ?? "已完成图片转文字。"} 已执行：${response.cleanupSummary.join("、")}`
@@ -204,9 +203,7 @@ function HomeContent() {
       if (target === "reference") {
         setReferenceText(response.text);
         setReferenceNote(noteWithCleanup);
-        setReferenceStatusLabel(
-          response.statusLabel || (mode === "qwen" ? "高精度识别已完成" : "本地识别已完成"),
-        );
+        setReferenceStatusLabel(response.statusLabel || "高精度识别已完成");
         setReferenceSuggestions(
           analyzeSuspiciousOcrIssues({
             text: response.text,
@@ -229,11 +226,7 @@ function HomeContent() {
       }
     } catch (error) {
       const fallbackMessage =
-        target === "student"
-          ? "学生作答 OCR 失败"
-          : mode === "qwen"
-            ? "参考答案高精度 OCR 失败"
-            : "参考答案本地 OCR 失败";
+        target === "student" ? "学生作答 OCR 失败" : "参考答案高精度 OCR 失败";
       const message = error instanceof Error ? error.message : fallbackMessage;
 
       if (target === "reference") {
@@ -382,7 +375,7 @@ function HomeContent() {
       <section className="mt-6 grid gap-4 md:grid-cols-2">
         <TextOcrPanel
           title="参考答案"
-          subtitle="上传参考答案图片后，可选择本地 OCR 或高精度 OCR，转换后仍可手动修改文本。"
+          subtitle="上传参考答案图片后，使用高精度 OCR 识别，转换后仍可手动修改文本。"
           helperText="如无需使用图片，可直接于文本框输入"
           file={referenceFile}
           imageDataUrl={referenceImageDataUrl}
@@ -424,16 +417,9 @@ function HomeContent() {
           }}
           ocrActions={[
             {
-              label: "图片转文字（快）",
+              label: "图片转文字",
               loadingLabel: "转换中...",
-              onClick: async () => runOcr("reference", "local"),
-              disabled: !referenceFile,
-              loading: ocrLoadingTarget === "reference",
-            },
-            {
-              label: "图片转文字（准）",
-              loadingLabel: "转换中...",
-              onClick: async () => runOcr("reference", "qwen"),
+              onClick: async () => runOcr("reference"),
               disabled: !referenceFile,
               loading: ocrLoadingTarget === "reference",
             },

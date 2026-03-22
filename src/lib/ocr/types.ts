@@ -1,5 +1,4 @@
 export type OcrTarget = "reference" | "student";
-export type OcrMode = "default" | "local" | "qwen";
 
 export type OcrSource = "tesseract" | "mock" | "google_vision";
 
